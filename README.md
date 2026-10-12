@@ -1,6 +1,8 @@
 # แบบประเมินความเสี่ยงงานยกเคลื่อนย้ายจากคลิปวิดีโอ
 
 แอป Streamlit ของกลุ่ม G13 รายวิชา CP413705 AI Workshop III (วิทยาลัยการคอมพิวเตอร์ มหาวิทยาลัยขอนแก่น)
+**ใช้งานได้ที่ <https://workshop3-g13.streamlit.app/>**
+
 อัปโหลดคลิปงานยก แล้วระบบกรอก **แบบประเมินความเสี่ยงงานยกเคลื่อนย้าย (Lifting Handling Risk Assessment)** ให้ครบ 7 ขั้นตอน
 โดยวัดตำแหน่งมือ มุมบิดตัว และจำนวนรอบยกจาก keypoint ของ MediaPipe Pose (ไม่ต้องเทรนโมเดล)
 
@@ -30,8 +32,8 @@
 streamlit_app.py      หน้าจอ Streamlit
 lifting.py            การคำนวณทั้งหมด (ย้ายมาจาก notebook ของกลุ่ม)
 requirements.txt      ไลบรารี Python
-packages.txt          แพ็กเกจระบบสำหรับ Streamlit Cloud (libGL ที่ OpenCV ต้องใช้)
-.streamlit/config.toml  สีธีม
+packages.txt          แพ็กเกจระบบสำหรับ Streamlit Cloud (libGL ของ OpenCV · libEGL และ libGLES ของ MediaPipe)
+.streamlit/config.toml  ธีม: ฟอนต์ Sarabun สี ขนาดหัวข้อ สีกราฟ
 docs/
   lifting_risk_form.png     แบบประเมินต้นฉบับ
   clip_ground_truth.docx    เฉลยเวลายกของคลิปทดสอบ 3 คลิป (ตรวจด้วยสายตา)
@@ -67,8 +69,10 @@ python lifting.py
    - Repository: `tharathep-kku/WorkShop3`
    - Branch: `main`
    - Main file path: `streamlit_app.py`
-3. เปิด **Advanced settings** เลือก Python **3.11**
-4. กด **Deploy**
+3. กด **Deploy**
+
+แอปที่ deploy อยู่รันบน Python 3.14 ถ้า `packages.txt` ขาด `libegl1` หรือ `libgles2` แอปจะล้มตอนโหลด MediaPipe
+ด้วย `OSError` จาก `ctypes.CDLL` เพราะ `libmediapipe.so` ต้องใช้ `libEGL.so.1` และ `libGLESv2.so.2`
 
 เครื่องของ Cloud ช้ากว่าเครื่องส่วนตัว (บนโน้ตบุ๊กที่ใช้ทดสอบ คลิป 44 วินาทีใช้เวลาตรวจจับท่าทางราว 40 วินาที และสร้างวิดีโอราว 25 วินาที)
 
@@ -120,7 +124,7 @@ python lifting.py
 - **มุมบิดอ่านต่ำกว่าจริง** รอบที่เฉลยระบุว่าบิดตัววัดได้สูงสุด 13–31° จึงไม่ถึงเกณฑ์ 45° ของแบบประเมิน ลดเกณฑ์ได้ที่ "ค่าปรับขั้นสูง"
 - **ต้องกลับมายืนพักมือระหว่างรอบ** ถ้ายกต่อเนื่องโดยไม่ปล่อยมือ ระบบนับรวมเป็นรอบเดียว
 - **ความถี่จากคลิปสั้น** คลิปที่ยกติดกัน 5 รอบใน 43 วินาทีคิดเป็น 7 รอบ/นาที ซึ่งอาจสูงกว่างานจริง ให้เลือกแถวความถี่เองในขั้นตอนที่ 3
-- **ยังไม่ได้ทดสอบบน Streamlit Cloud** ทดสอบบน Windows กับ Python 3.11 เท่านั้น `packages.txt` เขียนตามที่ OpenCV บน Linux ต้องใช้
+- **ทดสอบบน Streamlit Cloud ด้วยคลิปเดียว** คือคลิป `ยกสั้น` ที่ย่อเหลือ 540p (1.4 MB) ได้ผลประเมินและวิดีโอผลลัพธ์ครบ ยังไม่ได้ลองคลิปขนาดเต็ม 25 MB บน Cloud
 - คลิปที่อัปโหลดถูกเก็บเป็นไฟล์ชั่วคราวบนเครื่องที่รันแอป
 
 ## ที่มา

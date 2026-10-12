@@ -160,13 +160,13 @@ clip_key = hashlib.md5(data).hexdigest()
 video_path = TMP / f"{clip_key}{Path(upload.name).suffix.lower()}"
 if not video_path.is_file():
     video_path.write_bytes(data)
+status = st.empty()   # จองตำแหน่งแถบสถานะไว้ทุกรอบ ถ้าโผล่เฉพาะบางรอบ แท็บด้านล่างจะเลื่อนตำแหน่งแล้วเด้งกลับแท็บแรก
 if st.session_state.get("clip_key") != clip_key:
-    bar = st.progress(0.0, text="ตรวจจับท่าทางด้วย MediaPipe ...")
+    bar = status.progress(0.0, text="ตรวจจับท่าทางด้วย MediaPipe ...")
     st.session_state.keypoints = L.extract_video_keypoints(
         video_path, lambda f: bar.progress(f, text=f"ตรวจจับท่าทางด้วย MediaPipe ... {f:.0%}"))
     st.session_state.clip_key = clip_key
     st.session_state.pop("video", None)
-    bar.empty()
 keypoints = st.session_state.keypoints
 if len(keypoints["xy"]) == 0:
     st.error("อ่านวิดีโอไม่ได้ ลองแปลงไฟล์เป็น .mp4 (H.264) แล้วอัปโหลดใหม่")
@@ -174,7 +174,9 @@ if len(keypoints["xy"]) == 0:
 
 # ---- ② คำนวณทุกเฟรม + นับรอบ
 try:
-    results, levels, lifts, info = analyze(clip_key, str(video_path), height_cm, params, keypoints)
+    with status.container():                     # spinner ของ analyze อยู่ในตำแหน่งที่จองไว้
+        results, levels, lifts, info = analyze(clip_key, str(video_path), height_cm, params, keypoints)
+    status.empty()
 except Exception as error:   # คลิปที่ไม่มีคนยืนนิ่งช่วงต้นทำให้ calibrate ล้ม → บอกผู้ใช้แทนการขึ้นหน้า error
     st.error("ปรับเทียบจากช่วงต้นคลิปไม่สำเร็จ ตรวจว่าผู้ยกยืนตรงนิ่งเห็นเต็มตัวในช่วงแรกของคลิป")
     with st.expander("รายละเอียดข้อผิดพลาด"):
@@ -195,7 +197,7 @@ rows = [{**l, **L.assess(weight_kg, l["limit_kg"], freq_mult, l["twist_max_deg"]
         for l in lifts]
 
 tab_form, tab_video, tab_detail = st.tabs([":material/fact_check: ผลประเมิน", ":material/movie: วิดีโอผลลัพธ์",
-                                           ":material/show_chart: รายรอบและกราฟ"])
+                                           ":material/show_chart: รายรอบและกราฟ"], key="tabs")
 
 # ------------------------------------------------------------------ แท็บ 2: วิดีโอผลลัพธ์
 with tab_video:
