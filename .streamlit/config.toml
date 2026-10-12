@@ -1,2 +1,14 @@
+# โทเคนดีไซน์ของแอป: ฟอนต์ไทย สี ขนาดหัวข้อ มุมโค้ง — แก้ที่นี่ที่เดียว
 [theme]
+base = "light"
 primaryColor = "#0f766e"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f5f4"
+textColor = "#1c1f1e"
+borderColor = "#d5dad8"
+font = "Sarabun:https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap, sans-serif"
+baseFontSize = 17
+baseRadius = "0.5rem"
+headingFontSizes = ["2rem", "1.375rem", "1.125rem"]
+headingFontWeights = [700, 600, 600]
+chartCategoricalColors = ["#2a78d6", "#eb6834"]

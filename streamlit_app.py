@@ -20,9 +20,11 @@ ZONE_TH = {"Above Shoulder": "เหนือหัวไหล่", "Waist-Shou
 REACH_TH = {"Near": "ใกล้ (0–7″)", "Mild": "ปานกลาง (7–12″)", "Extended": "ระยะเอื้อม (>12″)"}
 LEVEL_COLOR = {1: "#92D050", 2: "#FFFF66", 3: "#F6C344", 4: "#EE7651"}   # สีตามแบบประเมิน
 LEVEL_RANGE = {1: "น้อยกว่า 50% RWL", 2: "50% – 75% RWL", 3: "มากกว่า 75% – 100% RWL", 4: "มากกว่า 100% RWL"}
-PICK_COLOR, PLACE_COLOR = "#93C5FD", "#FCD34D"
+PICK_COLOR, PLACE_COLOR = "#BFDBFE", "#FDE68A"    # พื้นช่องตาราง: จังหวะหยิบ · จังหวะวาง (มีข้อความกำกับเสมอ ไม่พึ่งสีอย่างเดียว)
+SERIES_COLORS = ["#2a78d6", "#eb6834"]            # เส้นกราฟชุดที่ 1, 2 (ตรงกับ chartCategoricalColors ใน .streamlit/config.toml)
+INK_MUTED, GRID = "#6b6f6d", "#e3e6e4"            # ตัวอักษรรอง · เส้นกริด
 
-st.set_page_config(page_title="แบบประเมินความเสี่ยงงานยก", page_icon="📦", layout="wide")
+st.set_page_config(page_title="แบบประเมินความเสี่ยงงานยก", page_icon=":material/fact_check:", layout="wide")
 
 
 # ------------------------------------------------------------------ ส่วนช่วยแสดงผล
@@ -30,7 +32,7 @@ def mark(df, cells):
     # ระบายสีช่องของตาราง: cells = {(แถว, คอลัมน์): สี}
     css = pd.DataFrame("", index=df.index, columns=df.columns)
     for (row, col), color in cells.items():
-        css.loc[row, col] = f"background-color: {color}; color: #111; font-weight: 700"
+        css.loc[row, col] = f"background-color: {color}; color: #111; font-weight: 600"
     return df.style.apply(lambda _: css, axis=None)
 
 
@@ -39,28 +41,46 @@ def station_text(s):
 
 
 def timeline(results, series, y_title, levels=(), lifts=()):
-    # กราฟตามเวลา: เส้นข้อมูล + เส้นประเกณฑ์ + แถบสีช่วงหยิบ→วางของแต่ละรอบ
-    data = (results[["time_s", *series]].rename(columns=series)
-            .melt("time_s", var_name="series", value_name="value").dropna())
+    # กราฟตามเวลา: เส้นข้อมูล + เส้นประเกณฑ์ + แถบเทาช่วงหยิบ→วางของแต่ละรอบ + เส้นเล็งตามเมาส์
+    names = list(series.values())
+    wide = results[["time_s", *series]].rename(columns=series)
+    data = wide.melt("time_s", var_name="series", value_name="value").dropna()
     t_max = float(results["time_s"].max())
+    x = alt.X("time_s:Q", title="เวลา (วินาที)", axis=alt.Axis(grid=False))
     layers = []
     if lifts:
-        spans = pd.DataFrame([{"start": l["pick"]["time_s"], "end": l["place"]["time_s"], "label": f"#{l['lift']}"}
+        spans = pd.DataFrame([{"start": l["pick"]["time_s"], "end": l["place"]["time_s"], "label": f"รอบ {l['lift']}"}
                               for l in lifts])
-        layers.append(alt.Chart(spans).mark_rect(opacity=0.2, color="#f59e0b").encode(x="start:Q", x2="end:Q"))
-        layers.append(alt.Chart(spans).mark_text(align="left", baseline="top", dx=3, dy=3, color="#b45309",
-                                                 fontWeight="bold").encode(x="start:Q", y=alt.value(0), text="label:N"))
+        layers.append(alt.Chart(spans).mark_rect(opacity=0.14, color=INK_MUTED).encode(x="start:Q", x2="end:Q"))
+        layers.append(alt.Chart(spans).mark_text(align="left", baseline="top", dx=3, dy=3, color=INK_MUTED)
+                      .encode(x="start:Q", y=alt.value(0), text="label:N"))
     layers.append(alt.Chart(data).mark_line(strokeWidth=2).encode(
-        x=alt.X("time_s:Q", title="เวลา (วินาที)"), y=alt.Y("value:Q", title=y_title),
-        color=alt.Color("series:N", legend=alt.Legend(orient="top", title=None)),
-        tooltip=[alt.Tooltip("time_s:Q", title="วินาที", format=".1f"), alt.Tooltip("series:N", title="ชุดข้อมูล"),
-                 alt.Tooltip("value:Q", title="ค่า", format=".1f")]))
+        x=x, y=alt.Y("value:Q", title=y_title, axis=alt.Axis(gridColor=GRID)),
+        color=alt.Color("series:N", scale=alt.Scale(domain=names, range=SERIES_COLORS[:len(names)]),
+                        legend=alt.Legend(orient="top", title=None, labelLimit=400) if len(names) > 1 else None)))
     if levels:
         rules = pd.DataFrame(levels, columns=["value", "label"])
-        layers.append(alt.Chart(rules).mark_rule(strokeDash=[4, 4], color="#6b7280").encode(y="value:Q"))
-        layers.append(alt.Chart(rules).mark_text(align="right", dx=-4, dy=-7, color="#6b7280").encode(
+        layers.append(alt.Chart(rules).mark_rule(strokeDash=[4, 4], color=INK_MUTED).encode(y="value:Q"))
+        layers.append(alt.Chart(rules).mark_text(align="right", dx=-4, dy=-7, color=INK_MUTED).encode(
             x=alt.datum(t_max), y="value:Q", text="label:N"))
+    hover = alt.selection_point(fields=["time_s"], nearest=True, on="pointerover", clear="pointerout", empty=False)
+    layers.append(alt.Chart(wide).mark_rule(color=INK_MUTED).encode(
+        x="time_s:Q", opacity=alt.condition(hover, alt.value(1), alt.value(0)),
+        tooltip=[alt.Tooltip("time_s:Q", title="วินาที", format=".1f"),
+                 *[alt.Tooltip(field=name, type="quantitative", format=".0f") for name in names]]).add_params(hover))
     return alt.layer(*layers).properties(height=240)
+
+
+def risk_banner(level, headline, meaning):
+    # แถบสรุประดับความเสี่ยง (สีตามแบบประเมิน · ระดับเขียนเป็นข้อความด้วยเสมอ)
+    st.markdown(
+        f"<div role='status' style='background:{LEVEL_COLOR[level]};color:#111;padding:1rem 1.25rem;border-radius:0.5rem'>"
+        f"<div style='font-size:1.5rem;font-weight:700;line-height:1.3'>{headline}</div>"
+        f"<div style='font-size:1rem'>{meaning}</div></div>", unsafe_allow_html=True)
+
+
+def tag(color, text):
+    return f"<span style='background:{color};color:#111;padding:0 0.5rem;border-radius:0.25rem'>{text}</span>"
 
 
 @st.cache_data(show_spinner="กำลังคำนวณตำแหน่งมือ มุมบิด และรอบยก ...", max_entries=20)
@@ -110,21 +130,21 @@ with st.sidebar:
         assert set(params) == set(asdict(default)), "slider ต้องครบทุกค่าใน Params"
 
 # ------------------------------------------------------------------ หน้าหลัก
-st.title("📦 แบบประเมินความเสี่ยงงานยกเคลื่อนย้าย")
+st.title("แบบประเมินความเสี่ยงงานยกเคลื่อนย้าย")
 st.caption("Lifting Handling Risk Assessment · วิเคราะห์ตำแหน่งมือ มุมบิดตัว และจำนวนรอบยกจากคลิปวิดีโอด้วย MediaPipe Pose")
 
 if upload is None:
-    st.info("อัปโหลดคลิปที่แถบด้านซ้ายเพื่อเริ่มประเมิน")
+    st.info("อัปโหลดคลิปที่แถบด้านซ้ายเพื่อเริ่มประเมิน", icon=":material/upload_file:")
     left, right = st.columns([3, 2])
     with left:
-        st.subheader("วิธีถ่ายคลิปให้ผลแม่น")
+        st.header("วิธีถ่ายคลิปให้ผลแม่น")
         st.markdown(
             "1. ตั้งกล้องนิ่ง เห็นผู้ยก**เต็มตัวตั้งแต่หัวถึงเท้า**ตลอดคลิป\n"
             "2. ผู้ยก**ยืนตรง มือแนบลำตัว นิ่ง 2 วินาที**ก่อนเริ่ม (ระบบใช้ช่วงนี้วัดสัดส่วนร่างกาย)\n"
             "3. หลังวางของทุกครั้ง **ปล่อยมือกลับมาแนบลำตัว** ก่อนยกรอบถัดไป (ระบบใช้ท่านี้แบ่งรอบ)\n"
             "4. ถ่ายด้านข้างของผู้ยกจะวัดระยะยื่นมือได้ใกล้จริงที่สุด\n"
             "5. กรอกส่วนสูงจริงและน้ำหนักวัตถุที่แถบด้านซ้าย")
-        st.subheader("ระบบคำนวณอะไรให้")
+        st.header("ระบบคำนวณอะไรให้")
         st.markdown(
             "- **ขั้นตอนที่ 2** น้ำหนักจากตาราง ณ ตำแหน่งมือตอนหยิบและตอนวาง\n"
             "- **ขั้นตอนที่ 3** ตัวคูณความถี่จากจำนวนรอบที่นับได้ในคลิป\n"
@@ -174,7 +194,8 @@ freq_mult = L.FREQ_MULTIPLIER[freq][hours]
 rows = [{**l, **L.assess(weight_kg, l["limit_kg"], freq_mult, l["twist_max_deg"], params["twist_warn_deg"])}
         for l in lifts]
 
-tab_form, tab_video, tab_detail = st.tabs(["📋 ผลประเมิน", "🎬 วิดีโอผลลัพธ์", "📈 รายรอบและกราฟ"])
+tab_form, tab_video, tab_detail = st.tabs([":material/fact_check: ผลประเมิน", ":material/movie: วิดีโอผลลัพธ์",
+                                           ":material/show_chart: รายรอบและกราฟ"])
 
 # ------------------------------------------------------------------ แท็บ 2: วิดีโอผลลัพธ์
 with tab_video:
@@ -182,7 +203,7 @@ with tab_video:
     video = st.session_state.get("video")
     if video and video["signature"] != signature:
         st.info("ค่าที่ตั้งเปลี่ยนไปจากตอนสร้างวิดีโอ กดสร้างใหม่เพื่อให้ตรงกับผลประเมินล่าสุด")
-    if st.button("🎬 สร้างวิดีโอผลลัพธ์", type="primary",
+    if st.button("สร้างวิดีโอผลลัพธ์", type="primary", icon=":material/movie:",
                  help="วาดโครงกระดูก ตารางน้ำหนัก และตัวนับรอบลงบนคลิป ใช้เวลาราว 1–2 เท่าของความยาวคลิป"):
         raw, final = TMP / f"{clip_key}_raw.mp4", TMP / f"{clip_key}_result.mp4"
         bar = st.progress(0.0, text="กำลังวาดผลลงบนวิดีโอ ...")
@@ -196,14 +217,14 @@ with tab_video:
         video = st.session_state.video = {"signature": signature, "path": str(final)}
     if video:
         st.video(video["path"])
-        st.download_button("⬇️ ดาวน์โหลดวิดีโอ (.mp4)", Path(video["path"]).read_bytes(),
-                           f"{Path(upload.name).stem}_result.mp4", "video/mp4")
+        st.download_button("ดาวน์โหลดวิดีโอ (.mp4)", Path(video["path"]).read_bytes(),
+                           f"{Path(upload.name).stem}_result.mp4", "video/mp4", icon=":material/download:")
     else:
         st.caption("ยังไม่ได้สร้างวิดีโอ · ผลประเมินในแท็บแรกไม่ต้องรอวิดีโอ")
 
 # ------------------------------------------------------------------ แท็บ 3: รายรอบและกราฟ
 with tab_detail:
-    st.subheader("สรุปรายรอบยก")
+    st.header("สรุปรายรอบยก")
     lift_table = pd.DataFrame([{
         "รอบ": r["lift"],
         "หยิบ (วินาที)": round(r["pick"]["time_s"], 1), "หยิบจาก": station_text(r["pick"]),
@@ -220,12 +241,13 @@ with tab_detail:
     if rows:
         st.dataframe(lift_table.style.apply(
             lambda row: [f"background-color: {LEVEL_COLOR[row['ระดับ']]}; color: #111" if col == "ระดับ" else ""
-                         for col in row.index], axis=1).format(precision=2), hide_index=True)
+                         for col in row.index], axis=1).format(precision=2).format("{:.1f}", subset=["หยิบ (วินาที)", "วาง (วินาที)"]),
+                     hide_index=True)
     else:
         st.caption("ไม่พบรอบยก — ดูเส้นความสูงมือด้านล่างเพื่อหาสาเหตุ")
 
-    st.subheader("เส้นเวลา")
-    st.caption("แถบสีส้ม = ช่วงถือของ (หยิบ → วาง) ของแต่ละรอบ · เส้นประ = เกณฑ์ของตาราง")
+    st.header("เส้นเวลา")
+    st.caption("แถบสีเทา = ช่วงถือของ (หยิบ → วาง) ของแต่ละรอบ · เส้นประ = เกณฑ์ของตาราง · ชี้ที่กราฟเพื่ออ่านค่า")
     st.altair_chart(timeline(results, {"V_cm": "ความสูงมือ V"}, "ความสูงจากพื้น (ซม.)",
                              [(levels["knee"], "เข่า"), (levels["waist"], "เอว"), (levels["shoulder"], "ไหล่")], lifts))
     st.altair_chart(timeline(results, {"H_cm": "ระยะยื่น H (จากข้อเท้า)", "reach_cm": "ระยะเอื้อม G13 (จากลำตัว)"},
@@ -236,31 +258,33 @@ with tab_detail:
                f"· ไหล่ {levels['shoulder']:.0f} ซม. · มุมหันเทียบกล้องควรใกล้ 90° (ถ่ายด้านข้าง)")
 
     c1, c2 = st.columns(2)
-    c1.download_button("⬇️ ตารางรายรอบ (.csv)", lift_table.to_csv(index=False).encode("utf-8-sig"),
-                       f"{Path(upload.name).stem}_lifts.csv", "text/csv", disabled=not rows)
-    c2.download_button("⬇️ ค่ารายเฟรม (.csv)", results.to_csv(index=False).encode("utf-8-sig"),
-                       f"{Path(upload.name).stem}_frames.csv", "text/csv")
+    c1.download_button("ตารางรายรอบ (.csv)", lift_table.to_csv(index=False).encode("utf-8-sig"),
+                       f"{Path(upload.name).stem}_lifts.csv", "text/csv", disabled=not rows, icon=":material/download:")
+    c2.download_button("ค่ารายเฟรม (.csv)", results.to_csv(index=False).encode("utf-8-sig"),
+                       f"{Path(upload.name).stem}_frames.csv", "text/csv", icon=":material/download:")
 
 # ------------------------------------------------------------------ แท็บ 1: แบบประเมิน 7 ขั้นตอน (วาดท้ายสุดเพราะมี st.stop)
 with tab_form:
     if not lifts:
         st.warning("ไม่พบรอบยกในคลิปนี้ — ตรวจว่าผู้ยกปล่อยมือกลับมาแนบลำตัวหลังวางของ "
-                   "หรือลด “ระยะยกขั้นต่ำที่นับเป็น 1 รอบ” ในค่าปรับขั้นสูง")
+                   "หรือลด “ระยะยกขั้นต่ำที่นับเป็น 1 รอบ” ในค่าปรับขั้นสูง", icon=":material/search_off:")
         st.stop()                                # แท็บอื่นวาดไปแล้วด้านบน
 
     summary = st.container()                     # เติมหลังรู้ตัวคูณความถี่ (เลือกในขั้นตอนที่ 3 ด้านล่าง)
-    st.divider()
+    st.header("รายละเอียดตามแบบประเมิน")
     left, right = st.columns(2, gap="large")
 
     with right:
         with st.container(border=True):
-            st.markdown("#### ขั้นตอนที่ 3 · จำนวนรอบของการยก")
+            st.subheader("ขั้นตอนที่ 3 · จำนวนรอบของการยก")
             st.caption(f"ระบบนับได้ **{len(lifts)} รอบ** ใน {active_min * 60:.0f} วินาที ≈ **{rate:.1f} รอบ/นาที** "
                        "· ถ้าความถี่ของงานจริงต่างจากในคลิป ให้เลือกแถวเอง")
             st.selectbox("ความถี่การยก", range(len(L.FREQ_ROWS)), index=L.freq_row(rate),
                          format_func=L.FREQ_ROWS.__getitem__, key=f"freq_{clip_key}")
-            freq_table = pd.DataFrame(L.FREQ_MULTIPLIER, index=L.FREQ_ROWS, columns=L.HOUR_COLS)
-            st.table(mark(freq_table, {(L.FREQ_ROWS[freq], L.HOUR_COLS[hours]): PLACE_COLOR}).format("{:.2f}"))
+            freq_table = pd.DataFrame(L.FREQ_MULTIPLIER, index=L.FREQ_ROWS, columns=L.HOUR_COLS).map("{:.2f}".format)
+            chosen = (L.FREQ_ROWS[freq], L.HOUR_COLS[hours])
+            freq_table.loc[chosen] += " ✓"
+            st.table(mark(freq_table, {chosen: PLACE_COLOR}))
             st.markdown(f"ตัวคูณความถี่ = **{freq_mult:.2f}**")
 
     worst = min(rows, key=lambda r: r["rwl_kg"])    # สรุปด้วยรอบที่ RWL ต่ำสุด (แย่ที่สุด)
@@ -271,10 +295,7 @@ with tab_form:
                                                assessor and f"ผู้ประเมิน {assessor}",
                                                assess_date.strftime("%d/%m/%Y")) if text)
         st.caption(header)
-        st.markdown(
-            f"<div style='background:{LEVEL_COLOR[worst['level']]};color:#111;padding:18px 22px;border-radius:10px'>"
-            f"<div style='font-size:1.6rem;font-weight:700'>ความเสี่ยงระดับ {worst['level']} · LH Index {index_text}</div>"
-            f"<div style='font-size:1.05rem'>{worst['meaning']}</div></div>", unsafe_allow_html=True)
+        risk_banner(worst["level"], f"ความเสี่ยงระดับ {worst['level']} · LH Index {index_text}", worst["meaning"])
         st.write("")
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("จำนวนรอบยกที่นับได้", f"{len(lifts)} รอบ")
@@ -287,47 +308,49 @@ with tab_form:
 
     with left:
         with st.container(border=True):
-            st.markdown("#### ขั้นตอนที่ 1 · น้ำหนักวัตถุสิ่งของที่ใช้ยก")
+            st.subheader("ขั้นตอนที่ 1 · น้ำหนักวัตถุสิ่งของที่ใช้ยก")
             st.markdown(f"น้ำหนักยก = **{weight_kg:g} กิโลกรัม**")
         with st.container(border=True):
-            st.markdown("#### ขั้นตอนที่ 2 · ตำแหน่งของมือขณะยกและวางวัตถุ")
+            st.subheader("ขั้นตอนที่ 2 · ตำแหน่งของมือขณะยกและวางวัตถุ")
             pick, place = worst["pick"], worst["place"]
             weight_table = pd.DataFrame(L.WEIGHT_LIMITS_KG, index=[ZONE_TH[z] for z in L.ROW_NAMES],
-                                        columns=[REACH_TH[c] for c in L.COL_NAMES])
-            cells = {(ZONE_TH[pick["zone"]], REACH_TH[pick["reach_class"]]): PICK_COLOR,
-                     (ZONE_TH[place["zone"]], REACH_TH[place["reach_class"]]): PLACE_COLOR}
-            st.table(mark(weight_table, cells))
+                                        columns=[REACH_TH[c] for c in L.COL_NAMES]).astype(str)
+            pick_cell = (ZONE_TH[pick["zone"]], REACH_TH[pick["reach_class"]])
+            place_cell = (ZONE_TH[place["zone"]], REACH_TH[place["reach_class"]])
+            weight_table.loc[pick_cell] += " · หยิบ"
+            weight_table.loc[place_cell] += " · วาง"
+            st.table(mark(weight_table, {pick_cell: PICK_COLOR, place_cell: PLACE_COLOR}))
             st.markdown(
-                f"<span style='background:{PICK_COLOR};color:#111;padding:1px 8px;border-radius:4px'>หยิบ</span> "
-                f"{station_text(pick)} → **{pick['limit_kg']} กก.** (วินาทีที่ {pick['time_s']:.1f})<br>"
-                f"<span style='background:{PLACE_COLOR};color:#111;padding:1px 8px;border-radius:4px'>วาง</span> "
-                f"{station_text(place)} → **{place['limit_kg']} กก.** (วินาทีที่ {place['time_s']:.1f})",
-                unsafe_allow_html=True)
+                f"{tag(PICK_COLOR, 'หยิบ')} {station_text(pick)} → **{pick['limit_kg']} กก.** "
+                f"(วินาทีที่ {pick['time_s']:.1f})<br>"
+                f"{tag(PLACE_COLOR, 'วาง')} {station_text(place)} → **{place['limit_kg']} กก.** "
+                f"(วินาทีที่ {place['time_s']:.1f})", unsafe_allow_html=True)
             st.markdown(f"ใช้ค่าที่น้อยกว่า = **{worst['limit_kg']} กก.**")
 
     with right:
         with st.container(border=True):
-            st.markdown("#### ขั้นตอนที่ 4 · การบิด/หมุนลำตัวขณะยก")
+            st.subheader("ขั้นตอนที่ 4 · การบิด/หมุนลำตัวขณะยก")
             twisted = worst["twist_multiplier"] < 1
             st.markdown(f"มุมบิดสูงสุดขณะถือของ = **{worst['twist_max_deg']:.0f}°** "
                         f"({'ถึง' if twisted else 'ไม่ถึง'}เกณฑ์ {params['twist_warn_deg']:.0f}°) "
                         f"→ ตัวคูณ = **{worst['twist_multiplier']:.2f}**")
 
     with st.container(border=True):
-        st.markdown("#### ขั้นตอนที่ 5 · ค่าขีดจำกัดของการยกย้าย (RWL)")
+        st.subheader("ขั้นตอนที่ 5 · ค่าขีดจำกัดของการยกย้าย (RWL)")
         st.markdown(f"### {worst['limit_kg']} กก. × {freq_mult:.2f} × {worst['twist_multiplier']:.2f} "
                     f"= {worst['rwl_kg']:.2f} กก.")
         st.caption("ขั้นตอนที่ 2 × ขั้นตอนที่ 3 × ขั้นตอนที่ 4")
     with st.container(border=True):
-        st.markdown("#### ขั้นตอนที่ 6 · ดัชนีงานยกเคลื่อนย้าย (LH Index)")
+        st.subheader("ขั้นตอนที่ 6 · ดัชนีงานยกเคลื่อนย้าย (LH Index)")
         if worst["rwl_kg"] > 0:
             st.markdown(f"### {weight_kg:g} ÷ {worst['rwl_kg']:.2f} × 100 = {worst['lh_index']:.0f}%")
         else:
             st.markdown("### RWL = 0 → ไม่ควรยกที่ความถี่นี้")
         st.caption("น้ำหนักขั้นตอนที่ 1 ÷ RWL × 100")
     with st.container(border=True):
-        st.markdown("#### ขั้นตอนที่ 7 · สรุปผลระดับความเสี่ยง")
-        risk_table = pd.DataFrame([{"ความเสี่ยง": f"ระดับ {lv}", "LH Index": LEVEL_RANGE[lv], "ความหมาย": text}
+        st.subheader("ขั้นตอนที่ 7 · สรุปผลระดับความเสี่ยง")
+        risk_table = pd.DataFrame([{"ความเสี่ยง": f"ระดับ {lv}", "LH Index": LEVEL_RANGE[lv], "ความหมาย": text,
+                                    "ผลประเมิน": "✓ คลิปนี้" if lv == worst["level"] else ""}
                                    for lv, text in L.RISK_LEVELS]).set_index("ความเสี่ยง")
         st.table(mark(risk_table, {(f"ระดับ {worst['level']}", col): LEVEL_COLOR[worst["level"]]
                                    for col in risk_table.columns}))
@@ -345,5 +368,5 @@ with tab_form:
         ("ขั้นตอนที่ 6 LH Index (%)", index_text), ("ขั้นตอนที่ 7 ระดับความเสี่ยง", worst["level"]),
         ("ความหมาย", worst["meaning"]), ("จำนวนรอบที่นับได้", len(lifts)),
     ], columns=["รายการ", "ค่า"])
-    st.download_button("⬇️ ดาวน์โหลดผลประเมิน (.csv)", report.to_csv(index=False).encode("utf-8-sig"),
-                       f"{Path(upload.name).stem}_assessment.csv", "text/csv")
+    st.download_button("ดาวน์โหลดผลประเมิน (.csv)", report.to_csv(index=False).encode("utf-8-sig"),
+                       f"{Path(upload.name).stem}_assessment.csv", "text/csv", icon=":material/download:")
