@@ -1,0 +1,4 @@
+streamlit==1.65.0
+mediapipe==1.1.0
+imageio-ffmpeg
+pandas

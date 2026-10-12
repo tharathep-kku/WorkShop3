@@ -1,0 +1,6 @@
+﻿clip,นับได้,เฉลย,นับรอบ ✓,บิดสูงสุด (°),มุมบิด ✓,ระยะยื่น,ระยะยื่น ✓,โซนที่ผ่าน,โซน ✓
+G13_S03_AS-WS_RN_T1_PS_03,1,1,True,21.0,False,Extended,False,Knee-Waist → Waist-Shoulder → Above Shoulder,True
+G13_S03_BK-WS_RM_T0_PN_02,1,1,True,15.0,True,Extended,False,Knee-Waist → Below Knee → Waist-Shoulder,True
+G13_S03_KW-WS_RM_T0_PF_02,0,1,False,12.0,True,Extended,False,Knee-Waist → Waist-Shoulder,True
+G13_S03_NEG-HOLD_RN_T1_PN_03,0,0,True,30.0,True,Extended,False,,
+G13_S03_WS-AS_RN_T0_PN_02,1,1,True,14.0,True,Mild,False,Knee-Waist → Waist-Shoulder → Above Shoulder,True
